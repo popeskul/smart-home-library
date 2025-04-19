@@ -1,8 +1,8 @@
 use super::device_trait::{PowerConsumption, PowerControl, SmartDeviceTrait, TemperatureSensor};
 use super::{SmartSocket, SmartThermometer};
+use crate::Reporter;
 use std::fmt::Debug;
 
-/// Enum representing different types of smart devices
 #[derive(Debug)]
 pub enum SmartDevice {
     Thermometer(SmartThermometer),
@@ -17,7 +17,21 @@ impl SmartDeviceTrait for SmartDevice {
             SmartDevice::Socket(socket) => socket.name(),
         }
     }
+}
 
+impl From<SmartSocket> for SmartDevice {
+    fn from(socket: SmartSocket) -> Self {
+        SmartDevice::Socket(socket)
+    }
+}
+
+impl From<SmartThermometer> for SmartDevice {
+    fn from(thermometer: SmartThermometer) -> Self {
+        SmartDevice::Thermometer(thermometer)
+    }
+}
+
+impl Reporter for SmartDevice {
     fn report(&self) -> String {
         match self {
             SmartDevice::Thermometer(thermometer) => thermometer.report(),
@@ -26,7 +40,6 @@ impl SmartDeviceTrait for SmartDevice {
     }
 }
 
-// Implementation of power control methods for the enum
 impl SmartDevice {
     /// Checks if the device supports power control functionality
     pub fn supports_power_control(&self) -> bool {
@@ -89,19 +102,16 @@ impl SmartDevice {
 mod tests {
     use super::*;
 
-    // Helper function to create a thermometer device
     fn create_test_thermometer() -> SmartDevice {
         let thermometer = SmartThermometer::new(String::from("Test Thermometer"), 22.5);
         SmartDevice::Thermometer(thermometer)
     }
 
-    // Helper function to create a socket device (on)
     fn create_test_socket_on() -> SmartDevice {
         let socket = SmartSocket::new(String::from("Test Socket"), true, 100.0);
         SmartDevice::Socket(socket)
     }
 
-    // Helper function to create a socket device (off)
     fn create_test_socket_off() -> SmartDevice {
         let socket = SmartSocket::new(String::from("Test Socket"), false, 100.0);
         SmartDevice::Socket(socket)
@@ -278,10 +288,8 @@ mod tests {
         ];
 
         for tc in test_cases {
-            // Create a fresh device for each test case
             let mut device = (tc.device_factory)();
 
-            // Perform the operation and verify the result
             let result = (tc.operation)(&mut device);
             assert_eq!(
                 result, tc.expected_result,

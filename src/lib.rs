@@ -5,20 +5,22 @@
 
 // Export all modules
 pub mod device;
-pub mod error;
+mod error;
 pub mod house;
+pub mod report;
 pub mod room;
 
 // Re-export main types for easier access
 pub use device::{SmartDevice, SmartDeviceTrait, SmartSocket, SmartThermometer};
-pub use error::AccessError;
 pub use house::SmartHouse;
+pub use report::Reporter;
 pub use room::Room;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::device::device_trait::{PowerConsumption, PowerControl};
+    use std::collections::HashMap;
 
     #[test]
     fn smart_socket_power_consumption() {
@@ -34,31 +36,40 @@ mod tests {
         let thermo = SmartThermometer::new(String::from("Test Thermo"), 22.5);
         let socket = SmartSocket::new(String::from("Test Socket"), true, 100.0);
 
-        let room = Room::new(
-            String::from("Test Room"),
-            vec![
-                SmartDevice::Thermometer(thermo),
-                SmartDevice::Socket(socket),
-            ],
+        let mut devices = HashMap::new();
+        devices.insert("Test Thermo".to_string(), SmartDevice::Thermometer(thermo));
+        devices.insert("Test Socket".to_string(), SmartDevice::Socket(socket));
+
+        let room = Room::new(String::from("Test Room"), devices);
+
+        assert!(room.device(&"Test Thermo".to_string()).is_some());
+        assert!(room.device(&"Test Socket".to_string()).is_some());
+        assert!(room.device(&"Non-existent Device".to_string()).is_none());
+
+        assert_eq!(
+            room.get_temperature(&"Test Thermo".to_string()).unwrap(),
+            Some(22.5)
         );
-
-        assert!(room.devices(0).is_ok());
-        assert!(room.devices(1).is_ok());
-        assert!(room.devices(2).is_err());
-
-        assert_eq!(room.get_temperature(0).unwrap(), Some(22.5));
-        assert_eq!(room.get_power_consumption(1).unwrap(), Some(100.0));
+        assert_eq!(
+            room.get_power_consumption(&"Test Socket".to_string())
+                .unwrap(),
+            Some(100.0)
+        );
     }
 
     #[test]
     fn house_room_access() {
-        let room1 = Room::new(String::from("Room 1"), vec![]);
-        let room2 = Room::new(String::from("Room 2"), vec![]);
+        let room1 = Room::new(String::from("Room 1"), HashMap::new());
+        let room2 = Room::new(String::from("Room 2"), HashMap::new());
 
-        let house = SmartHouse::new(String::from("Test House"), vec![room1, room2]);
+        let mut rooms = HashMap::new();
+        rooms.insert("Room 1".to_string(), room1);
+        rooms.insert("Room 2".to_string(), room2);
 
-        assert!(house.rooms(0).is_ok());
-        assert!(house.rooms(1).is_ok());
-        assert!(house.rooms(2).is_err());
+        let house = SmartHouse::new(String::from("Test House"), rooms);
+
+        assert!(house.room(&"Room 1".to_string()).is_some());
+        assert!(house.room(&"Room 2".to_string()).is_some());
+        assert!(house.room(&"Non-existent Room".to_string()).is_none());
     }
 }

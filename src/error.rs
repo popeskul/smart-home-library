@@ -1,8 +1,11 @@
-// Error type for resource access (rooms or devices)
+// Original AccessError kept for backward compatibility
 #[derive(Debug)]
 pub struct AccessError {
+    /// Type of resource being accessed (e.g., "Room", "Device")
     pub resource_type: String,
+    /// Index that was requested
     pub requested_index: usize,
+    /// Total number of available resources
     pub total_count: usize,
 }
 
@@ -20,6 +23,34 @@ impl std::fmt::Display for AccessError {
 }
 
 impl std::error::Error for AccessError {}
+
+#[derive(Debug)]
+pub enum DeviceAccessError {
+    RoomNotFound(String),
+
+    /// Device not found in a specific room
+    /// Example: DeviceNotFound(device_name, room_name)
+    DeviceNotFound(String, String),
+}
+
+impl std::fmt::Display for DeviceAccessError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeviceAccessError::RoomNotFound(room_name) => {
+                write!(f, "Room '{}' not found", room_name)
+            }
+            DeviceAccessError::DeviceNotFound(device_name, room_name) => {
+                write!(
+                    f,
+                    "Device '{}' not found in room '{}'",
+                    device_name, room_name
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for DeviceAccessError {}
 
 #[cfg(test)]
 mod tests {
@@ -61,7 +92,6 @@ mod tests {
 
         let debug_output = format!("{:?}", error);
 
-        // Debug output should contain all fields
         assert!(debug_output.contains("resource_type"));
         assert!(debug_output.contains("Room"));
         assert!(debug_output.contains("requested_index"));
@@ -128,5 +158,24 @@ mod tests {
                 usize::MAX
             )
         );
+    }
+
+    #[test]
+    fn test_device_access_error() {
+        let room_error = DeviceAccessError::RoomNotFound("Living Room".to_string());
+        assert!(format!("{}", room_error).contains("Room 'Living Room' not found"));
+
+        let device_error =
+            DeviceAccessError::DeviceNotFound("Fridge".to_string(), "Kitchen".to_string());
+        let error_msg = format!("{}", device_error);
+        assert!(error_msg.contains("Device 'Fridge' not found in room 'Kitchen'"));
+
+        // Check Error trait implementation
+        let _: &dyn Error = &room_error;
+        let _: &dyn Error = &device_error;
+
+        let debug_output = format!("{:?}", room_error);
+        assert!(debug_output.contains("RoomNotFound"));
+        assert!(debug_output.contains("Living Room"));
     }
 }

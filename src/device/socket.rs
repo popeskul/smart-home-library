@@ -1,3 +1,4 @@
+use crate::Reporter;
 use crate::device::device_trait::{PowerConsumption, PowerControl, SmartDeviceTrait};
 
 /// Smart socket device implementation
@@ -35,16 +36,6 @@ impl SmartDeviceTrait for SmartSocket {
     fn name(&self) -> &str {
         &self.name
     }
-
-    fn report(&self) -> String {
-        let status = if self.is_on() { "ON" } else { "OFF" };
-        format!(
-            "Device: {name}, Status: {status}, Power consumption: {consumption}W",
-            name = self.name(),
-            status = status,
-            consumption = self.power_consumption()
-        )
-    }
 }
 
 impl PowerControl for SmartSocket {
@@ -64,6 +55,18 @@ impl PowerControl for SmartSocket {
 impl PowerConsumption for SmartSocket {
     fn power_consumption(&self) -> f32 {
         self.calculate_active_power()
+    }
+}
+
+impl Reporter for SmartSocket {
+    fn report(&self) -> String {
+        let status = if self.is_on() { "ON" } else { "OFF" };
+        format!(
+            "Device: {name}, Status: {status}, Power consumption: {consumption}W",
+            name = self.name(),
+            status = status,
+            consumption = self.power_consumption()
+        )
     }
 }
 

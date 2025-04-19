@@ -2,9 +2,6 @@
 pub trait SmartDeviceTrait {
     /// Returns the name of the device
     fn name(&self) -> &str;
-
-    /// Generates a report about the device's current state
-    fn report(&self) -> String;
 }
 
 /// Trait for devices that can be turned on/off
@@ -40,7 +37,6 @@ pub mod tests {
         pub SmartDevice {}
         impl SmartDeviceTrait for SmartDevice {
             fn name(&self) -> &str;
-            fn report(&self) -> String;
         }
     }
 
@@ -48,7 +44,6 @@ pub mod tests {
         pub PowerDevice {}
         impl SmartDeviceTrait for PowerDevice {
             fn name(&self) -> &str;
-            fn report(&self) -> String;
         }
         impl PowerControl for PowerDevice {
             fn is_on(&self) -> bool;
@@ -61,7 +56,6 @@ pub mod tests {
         pub TempSensorDevice {}
         impl SmartDeviceTrait for TempSensorDevice {
             fn name(&self) -> &str;
-            fn report(&self) -> String;
         }
         impl TemperatureSensor for TempSensorDevice {
             fn temperature(&self) -> f32;
@@ -72,7 +66,6 @@ pub mod tests {
         pub PowerConsumptionDevice {}
         impl SmartDeviceTrait for PowerConsumptionDevice {
             fn name(&self) -> &str;
-            fn report(&self) -> String;
         }
         impl PowerConsumption for PowerConsumptionDevice {
             fn power_consumption(&self) -> f32;

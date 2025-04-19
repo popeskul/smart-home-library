@@ -1,18 +1,26 @@
+use crate::Reporter;
 use crate::device::SmartDevice;
-use crate::device::device_trait::SmartDeviceTrait;
-use crate::error::AccessError;
+use std::collections::HashMap;
 
 /// Represents a room in a smart house with multiple devices
 #[derive(Debug)]
 pub struct Room {
     name: String,
-    devices: Vec<SmartDevice>,
+    devices: HashMap<String, SmartDevice>,
 }
 
 impl Room {
     /// Creates a new room with the specified name and devices
-    pub fn new(name: String, devices: Vec<SmartDevice>) -> Self {
-        Self { name, devices }
+    pub fn new(name: String, devices: HashMap<String, SmartDevice>) -> Self {
+        Room { name, devices }
+    }
+
+    /// Creates an empty room with the specified name
+    pub fn new_empty(name: String) -> Self {
+        Room {
+            name,
+            devices: HashMap::new(),
+        }
     }
 
     /// Returns the name of the room
@@ -21,103 +29,129 @@ impl Room {
     }
 
     /// Returns all devices in the room
-    pub fn all_devices(&self) -> &[SmartDevice] {
+    pub fn all_devices(&self) -> &HashMap<String, SmartDevice> {
         &self.devices
     }
 
-    /// Returns a reference to a specific device by index
-    pub fn devices(&self, index: usize) -> Result<&SmartDevice, AccessError> {
-        let total_devices = self.devices.len();
-        self.devices.get(index).ok_or_else(|| AccessError {
-            resource_type: String::from("Device"),
-            requested_index: index,
-            total_count: total_devices,
-        })
+    /// Returns a reference to a specific device by name
+    pub fn device(&self, name: &String) -> Option<&SmartDevice> {
+        self.devices.get(name)
     }
 
-    /// Returns a mutable reference to a specific device by index
-    pub fn devices_mut(&mut self, index: usize) -> Result<&mut SmartDevice, AccessError> {
-        let total_devices = self.devices.len();
-
-        self.devices.get_mut(index).ok_or_else(|| AccessError {
-            resource_type: String::from("Device"),
-            requested_index: index,
-            total_count: total_devices,
-        })
+    /// Returns a mutable reference to a specific device by name
+    pub fn device_mut(&mut self, name: &String) -> Option<&mut SmartDevice> {
+        self.devices.get_mut(name)
     }
 
-    /// Generates a text report about the room and its devices
-    pub fn report(&self) -> String {
-        let estimated_capacity =
-            self.name.len() + self.devices.iter().map(|d| d.report().len()).sum::<usize>() + 50;
+    /// Adds a new device to the room
+    pub fn add_device(&mut self, name: String, device: SmartDevice) -> Option<SmartDevice> {
+        self.devices.insert(name, device)
+    }
+
+    /// Removes a device from the room by name
+    pub fn remove_device(&mut self, name: &String) -> Option<SmartDevice> {
+        self.devices.remove(name)
+    }
+
+    /// Turns on a device by name (if the device supports power control)
+    pub fn turn_on_device(&mut self, name: &String) -> Option<bool> {
+        self.device_mut(name).map(|device| device.turn_on())
+    }
+
+    /// Turns off a device by name (if the device supports power control)
+    pub fn turn_off_device(&mut self, name: &String) -> Option<bool> {
+        self.device_mut(name).map(|device| device.turn_off())
+    }
+
+    /// Gets temperature from a device (if it's a thermometer)
+    pub fn get_temperature(&self, name: &String) -> Option<Option<f32>> {
+        self.device(name).map(|device| device.temperature())
+    }
+
+    /// Gets power consumption from a device (if it's a socket)
+    pub fn get_power_consumption(&self, name: &String) -> Option<Option<f32>> {
+        self.device(name).map(|device| device.power_consumption())
+    }
+}
+
+impl Reporter for Room {
+    fn report(&self) -> String {
+        let header_format = format!("=== Room: {} ===\n", self.name);
+        let newlines = self.devices.len();
+
+        let estimated_capacity = header_format.len()
+            + self
+                .devices
+                .values()
+                .map(|d| d.report().len())
+                .sum::<usize>()
+            + newlines;
 
         let mut report = String::with_capacity(estimated_capacity);
 
-        report.push_str(&format!("=== Room: {} ===\n", self.name));
+        report.push_str(&header_format);
 
-        for device in &self.devices {
+        for device in self.devices.values() {
             report.push_str(&device.report());
             report.push('\n');
         }
 
         report
     }
+}
 
-    /// Adds a new device to the room
-    pub fn add_device(&mut self, device: SmartDevice) {
-        self.devices.push(device);
-    }
+/// Macro to create a room with a name and devices
+/// Usage:
+/// ```
+/// use smart_home::{create_room, Room, SmartDevice, SmartSocket, SmartThermometer};
+///
+/// // Create an empty room
+/// let empty_room = create_room!();
+///
+/// // Create a room with just a name
+/// let named_room = create_room!("Living Room");
+///
+/// // Create a room with devices
+/// let socket = SmartSocket::new("Test Socket".to_string(), true, 100.0);
+/// let thermo = SmartThermometer::new("Test Thermo".to_string(), 22.5);
+/// let room_with_devices = create_room!(
+///     "Living Room",
+///     ("Socket", socket),
+///     ("Thermometer", thermo)
+/// );
+/// ```
+#[macro_export]
+macro_rules! create_room {
+    () => {{
+        Room::new_empty("Default Room".to_string())
+    }};
 
-    /// Removes a device from the room by index
-    pub fn remove_device(&mut self, index: usize) -> Result<SmartDevice, AccessError> {
-        if index < self.devices.len() {
-            Ok(self.devices.remove(index))
-        } else {
-            Err(AccessError {
-                resource_type: String::from("Device"),
-                requested_index: index,
-                total_count: self.devices.len(),
-            })
-        }
-    }
+    ($room_name:expr) => {{
+        Room::new_empty($room_name.to_string())
+    }};
 
-    /// Turns on a device by index (if the device supports power control)
-    pub fn turn_on_device(&mut self, index: usize) -> Result<bool, AccessError> {
-        let device = self.devices_mut(index)?;
-        Ok(device.turn_on())
-    }
-
-    /// Turns off a device by index (if the device supports power control)
-    pub fn turn_off_device(&mut self, index: usize) -> Result<bool, AccessError> {
-        let device = self.devices_mut(index)?;
-        Ok(device.turn_off())
-    }
-
-    /// Gets temperature from a device (if it's a thermometer)
-    pub fn get_temperature(&self, index: usize) -> Result<Option<f32>, AccessError> {
-        let device = self.devices(index)?;
-        Ok(device.temperature())
-    }
-
-    /// Gets power consumption from a device (if it's a socket)
-    pub fn get_power_consumption(&self, index: usize) -> Result<Option<f32>, AccessError> {
-        let device = self.devices(index)?;
-        Ok(device.power_consumption())
-    }
+    ($room_name:expr, $(($device_key:expr, $device:expr)),* $(,)?) => {{
+        let mut devices = std::collections::HashMap::new();
+        $(
+            devices.insert($device_key.to_string(), $device.into());
+        )*
+        Room::new($room_name.to_string(), devices)
+    }};
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SmartDeviceTrait;
     use crate::device::{SmartDevice, SmartSocket, SmartThermometer};
     use mockall::mock;
     use mockall::predicate::*;
+    use std::collections::HashMap;
 
     mock! {
         pub SmartDevice {}
         impl SmartDeviceTrait for SmartDevice {
             fn name(&self) -> &str;
-            fn report(&self) -> String;
         }
         impl Clone for SmartDevice {
             fn clone(&self) -> Self;
@@ -125,14 +159,19 @@ mod tests {
     }
 
     fn create_empty_room() -> Room {
-        Room::new(String::from("Test Room"), vec![])
+        Room::new(String::from("Test Room"), HashMap::new())
     }
 
     fn create_room_with_devices() -> Room {
-        let devices = vec![
+        let mut devices = HashMap::new();
+        devices.insert(
+            "Test Thermometer".to_string(),
             SmartDevice::Thermometer(SmartThermometer::new("Test Thermometer".to_string(), 22.0)),
+        );
+        devices.insert(
+            "Test Socket".to_string(),
             SmartDevice::Socket(SmartSocket::new("Test Socket".to_string(), true, 100.0)),
-        ];
+        );
 
         Room::new(String::from("Test Room"), devices)
     }
@@ -142,7 +181,7 @@ mod tests {
         struct RoomCreationTestCase {
             name: &'static str,
             room_name: String,
-            devices: Vec<SmartDevice>,
+            devices: HashMap<String, SmartDevice>,
             expected_name: &'static str,
             expected_devices_count: usize,
         }
@@ -151,17 +190,24 @@ mod tests {
             RoomCreationTestCase {
                 name: "Empty room creation",
                 room_name: "Living Room".to_string(),
-                devices: vec![],
+                devices: HashMap::new(),
                 expected_name: "Living Room",
                 expected_devices_count: 0,
             },
             RoomCreationTestCase {
                 name: "Room with devices",
                 room_name: "Bedroom".to_string(),
-                devices: vec![SmartDevice::Thermometer(SmartThermometer::new(
-                    "Bedroom Thermometer".to_string(),
-                    21.5,
-                ))],
+                devices: {
+                    let mut devices = HashMap::new();
+                    devices.insert(
+                        "Bedroom Thermometer".to_string(),
+                        SmartDevice::Thermometer(SmartThermometer::new(
+                            "Bedroom Thermometer".to_string(),
+                            21.5,
+                        )),
+                    );
+                    devices
+                },
                 expected_name: "Bedroom",
                 expected_devices_count: 1,
             },
@@ -209,7 +255,7 @@ mod tests {
                         "Added Thermometer".to_string(),
                         23.0,
                     ));
-                    room.add_device(device);
+                    room.add_device("Added Thermometer".to_string(), device);
                     Ok(room.all_devices().len())
                 },
                 expected_devices_count: 1,
@@ -218,9 +264,9 @@ mod tests {
             DeviceOperationTestCase {
                 name: "Remove device from room with devices",
                 use_empty_room: false,
-                operation: |room| match room.remove_device(0) {
-                    Ok(_) => Ok(room.all_devices().len()),
-                    Err(_) => Err(()),
+                operation: |room| match room.remove_device(&"Test Thermometer".to_string()) {
+                    Some(_) => Ok(room.all_devices().len()),
+                    None => Err(()),
                 },
                 expected_devices_count: 1,
                 expected_success: true,
@@ -228,9 +274,9 @@ mod tests {
             DeviceOperationTestCase {
                 name: "Try to remove non-existent device",
                 use_empty_room: false,
-                operation: |room| match room.remove_device(5) {
-                    Ok(_) => Ok(room.all_devices().len()),
-                    Err(_) => Err(()),
+                operation: |room| match room.remove_device(&"Non-existent Device".to_string()) {
+                    Some(_) => Ok(room.all_devices().len()),
+                    None => Err(()),
                 },
                 expected_devices_count: 2,
                 expected_success: false,
@@ -271,106 +317,38 @@ mod tests {
     }
 
     #[test]
-    fn test_device_access() {
-        struct DeviceAccessTestCase {
-            name: &'static str,
-            index: usize,
-            expected_success: bool,
-            expected_device_name: Option<&'static str>,
-        }
-
-        let test_cases = vec![
-            DeviceAccessTestCase {
-                name: "Access first device",
-                index: 0,
-                expected_success: true,
-                expected_device_name: Some("Test Thermometer"),
-            },
-            DeviceAccessTestCase {
-                name: "Access second device",
-                index: 1,
-                expected_success: true,
-                expected_device_name: Some("Test Socket"),
-            },
-            DeviceAccessTestCase {
-                name: "Access non-existent device",
-                index: 5,
-                expected_success: false,
-                expected_device_name: None,
-            },
-        ];
-
-        for tc in test_cases {
-            let room = create_room_with_devices();
-            let result = room.devices(tc.index);
-
-            match result {
-                Ok(device) => {
-                    assert!(
-                        tc.expected_success,
-                        "Test case '{}': Expected failure but got success",
-                        tc.name
-                    );
-                    if let Some(expected_name) = tc.expected_device_name {
-                        assert_eq!(
-                            device.name(),
-                            expected_name,
-                            "Test case '{}': Expected device name '{}' but got '{}'",
-                            tc.name,
-                            expected_name,
-                            device.name()
-                        );
-                    }
-                }
-                Err(_) => {
-                    assert!(
-                        !tc.expected_success,
-                        "Test case '{}': Expected success but got failure",
-                        tc.name
-                    );
-                    assert_eq!(
-                        tc.expected_device_name, None,
-                        "Test case '{}': Expected no device name for failure case",
-                        tc.name
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
     fn test_device_operations() {
         struct DeviceOperationTestCase {
             name: &'static str,
-            operation: fn(&mut Room) -> Result<bool, AccessError>,
+            operation: fn(&mut Room) -> Option<bool>,
             expected_success: bool,
-            expected_operation_result: bool,
+            expected_operation_result: Option<bool>,
         }
 
         let test_cases = vec![
             DeviceOperationTestCase {
                 name: "Turn off socket",
-                operation: |room| room.turn_off_device(1),
+                operation: |room| room.turn_off_device(&"Test Socket".to_string()),
                 expected_success: true,
-                expected_operation_result: true,
+                expected_operation_result: Some(true),
             },
             DeviceOperationTestCase {
                 name: "Turn on socket",
-                operation: |room| room.turn_on_device(1),
+                operation: |room| room.turn_on_device(&"Test Socket".to_string()),
                 expected_success: true,
-                expected_operation_result: true,
+                expected_operation_result: Some(true),
             },
             DeviceOperationTestCase {
                 name: "Try to turn on thermometer (not supported)",
-                operation: |room| room.turn_on_device(0),
+                operation: |room| room.turn_on_device(&"Test Thermometer".to_string()),
                 expected_success: true,
-                expected_operation_result: false,
+                expected_operation_result: Some(false),
             },
             DeviceOperationTestCase {
                 name: "Try to operate non-existent device",
-                operation: |room| room.turn_on_device(5),
+                operation: |room| room.turn_on_device(&"Non-existent Device".to_string()),
                 expected_success: false,
-                expected_operation_result: false,
+                expected_operation_result: None,
             },
         ];
 
@@ -379,19 +357,22 @@ mod tests {
             let result = (tc.operation)(&mut room);
 
             match result {
-                Ok(operation_result) => {
+                Some(operation_result) => {
                     assert!(
                         tc.expected_success,
                         "Test case '{}': Expected failure but got success",
                         tc.name
                     );
                     assert_eq!(
-                        operation_result, tc.expected_operation_result,
-                        "Test case '{}': Expected operation result {} but got {}",
-                        tc.name, tc.expected_operation_result, operation_result
+                        Some(operation_result),
+                        tc.expected_operation_result,
+                        "Test case '{}': Expected operation result {:?} but got {:?}",
+                        tc.name,
+                        tc.expected_operation_result,
+                        Some(operation_result)
                     );
                 }
-                Err(_) => {
+                None => {
                     assert!(
                         !tc.expected_success,
                         "Test case '{}': Expected success but got failure",
@@ -406,8 +387,8 @@ mod tests {
     fn test_specialized_accessors() {
         struct SpecializedAccessTestCase {
             name: &'static str,
-            accessor: fn(&Room, usize) -> Result<Option<f32>, AccessError>,
-            device_index: usize,
+            accessor: fn(&Room, &String) -> Option<Option<f32>>,
+            device_name: &'static str,
             expected_success: bool,
             expected_value: Option<f32>,
         }
@@ -415,36 +396,36 @@ mod tests {
         let test_cases = vec![
             SpecializedAccessTestCase {
                 name: "Get temperature from thermometer",
-                accessor: |room, idx| room.get_temperature(idx),
-                device_index: 0,
+                accessor: |room, name| room.get_temperature(name),
+                device_name: "Test Thermometer",
                 expected_success: true,
                 expected_value: Some(22.0),
             },
             SpecializedAccessTestCase {
                 name: "Get temperature from socket (not supported)",
-                accessor: |room, idx| room.get_temperature(idx),
-                device_index: 1,
+                accessor: |room, name| room.get_temperature(name),
+                device_name: "Test Socket",
                 expected_success: true,
                 expected_value: None,
             },
             SpecializedAccessTestCase {
                 name: "Get power consumption from socket",
-                accessor: |room, idx| room.get_power_consumption(idx),
-                device_index: 1,
+                accessor: |room, name| room.get_power_consumption(name),
+                device_name: "Test Socket",
                 expected_success: true,
                 expected_value: Some(100.0),
             },
             SpecializedAccessTestCase {
                 name: "Get power consumption from thermometer (not supported)",
-                accessor: |room, idx| room.get_power_consumption(idx),
-                device_index: 0,
+                accessor: |room, name| room.get_power_consumption(name),
+                device_name: "Test Thermometer",
                 expected_success: true,
                 expected_value: None,
             },
             SpecializedAccessTestCase {
                 name: "Try to get temperature from non-existent device",
-                accessor: |room, idx| room.get_temperature(idx),
-                device_index: 5,
+                accessor: |room, name| room.get_temperature(name),
+                device_name: "Non-existent Device",
                 expected_success: false,
                 expected_value: None,
             },
@@ -452,10 +433,10 @@ mod tests {
 
         for tc in test_cases {
             let room = create_room_with_devices();
-            let result = (tc.accessor)(&room, tc.device_index);
+            let result = (tc.accessor)(&room, &tc.device_name.to_string());
 
             match result {
-                Ok(value) => {
+                Some(value) => {
                     assert!(
                         tc.expected_success,
                         "Test case '{}': Expected failure but got success",
@@ -467,7 +448,7 @@ mod tests {
                         tc.name, tc.expected_value, value
                     );
                 }
-                Err(_) => {
+                None => {
                     assert!(
                         !tc.expected_success,
                         "Test case '{}': Expected success but got failure",
@@ -476,31 +457,5 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn test_room_with_mock_devices() {
-        let mut mock_device1 = MockSmartDevice::new();
-        let mut mock_device2 = MockSmartDevice::new();
-
-        mock_device1
-            .expect_name()
-            .return_const(String::from("Mock Thermometer"));
-        mock_device1
-            .expect_report()
-            .return_const("Mock Thermometer Report".to_string());
-        mock_device1
-            .expect_clone()
-            .return_const(MockSmartDevice::new());
-
-        mock_device2
-            .expect_name()
-            .return_const(String::from("Mock Socket"));
-        mock_device2
-            .expect_report()
-            .return_const("Mock Socket Report".to_string());
-        mock_device2
-            .expect_clone()
-            .return_const(MockSmartDevice::new());
     }
 }

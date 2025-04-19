@@ -28,6 +28,11 @@ test:
 	$(CARGO) test
 	@echo "$(GREEN)All tests passed.$(NC)"
 
+coverage:
+	@echo "$(GREEN)Generating test coverage report...$(NC)"
+	$(CARGO) tarpaulin -v --all-features --workspace --timeout 120 --out Html
+	@echo "$(GREEN)Coverage report generated. Open 'tarpaulin-report.html' in your browser.$(NC)"
+
 clean:
 	@echo "$(GREEN)Cleaning project...$(NC)"
 	$(CARGO) clean
