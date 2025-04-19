@@ -1,110 +1,80 @@
-use smart_home::{Room, SmartDevice, SmartHouse, SmartSocket, SmartThermometer};
+use smart_home::{
+    Reporter, Room, SmartDevice, SmartDeviceTrait, SmartHouse, SmartSocket, SmartThermometer,
+    create_room,
+};
 
-fn main() {
-    // Create devices for the first room
-    let thermo1 = SmartThermometer::new(String::from("Living Room Thermometer"), 22.5);
-    let socket1 = SmartSocket::new(String::from("Living Room Socket 1"), true, 120.0);
-    let socket2 = SmartSocket::new(String::from("Living Room Socket 2"), false, 0.0);
+fn demonstrate_dynamic_rooms_and_devices() {
+    println!("\n=== Демонстрація динамічного управління кімнатами та пристроями ===");
 
-    // Create devices for the second room
-    let thermo2 = SmartThermometer::new(String::from("Bedroom Thermometer"), 21.0);
-    let socket3 = SmartSocket::new(String::from("Bedroom Socket"), true, 80.0);
+    let mut house = SmartHouse::new_empty(String::from("Dynamic Smart Home"));
 
-    let living_room = Room::new(
-        String::from("Living Room"),
-        vec![
-            SmartDevice::Thermometer(thermo1),
-            SmartDevice::Socket(socket1),
-            SmartDevice::Socket(socket2),
-        ],
+    let living_room = create_room!(
+        "Living Room",
+        (
+            "TV Socket",
+            SmartSocket::new(String::from("TV Socket"), true, 50.0)
+        ),
+        (
+            "Room Thermometer",
+            SmartThermometer::new(String::from("Living Room Thermo"), 22.5)
+        )
     );
 
-    let bedroom = Room::new(
-        String::from("Bedroom"),
-        vec![
-            SmartDevice::Thermometer(thermo2),
-            SmartDevice::Socket(socket3),
-        ],
+    let bedroom = create_room!(
+        "Bedroom",
+        (
+            "Desk Lamp",
+            SmartSocket::new(String::from("Desk Lamp"), false, 10.0)
+        )
     );
 
-    let mut house = SmartHouse::new(String::from("My Smart House"), vec![living_room, bedroom]);
+    house.add_room("Living Room".to_string(), living_room);
+    house.add_room("Bedroom".to_string(), bedroom);
 
-    println!("Initial state:");
+    println!("Initial House State:");
     println!("{}", house.report());
 
-    println!("\nTurning off Living Room Socket 1...");
-    if let Ok(room) = house.rooms_mut(0) {
-        if let Ok(result) = room.turn_off_device(1) {
-            if result {
-                println!("Socket turned off successfully");
-            } else {
-                println!("Device does not support turning off");
-            }
-        } else {
-            println!("Failed to access the device");
-        }
-    } else {
-        println!("Failed to access the room");
+    if let Some(removed_room) = house.remove_room(&"Bedroom".to_string()) {
+        println!("\nВидалена кімната: {}", removed_room.name());
     }
 
-    println!("\nUpdated state:");
-    println!("{}", house.report());
+    if let Some(living_room) = house.room_mut(&"Living Room".to_string()) {
+        let new_socket = SmartSocket::new(String::from("Ceiling Light"), true, 20.0);
+        living_room.add_device("Ceiling Light".to_string(), new_socket.into());
 
-    println!("Checking temperature in bedroom...");
-    if let Ok(room) = house.rooms(1) {
-        if let Ok(temperature) = room.get_temperature(0) {
-            if let Some(temp) = temperature {
-                println!("Current temperature: {}°C", temp);
-            } else {
-                println!("Device does not support temperature readings");
-            }
-        } else {
-            println!("Failed to access the device");
+        if let Some(removed_device) = living_room.remove_device(&"TV Socket".to_string()) {
+            println!("\nВидалений пристрій: {}", removed_device.name());
         }
     }
 
-    println!("\nChecking power consumption in bedroom...");
-    if let Ok(room) = house.rooms(1) {
-        if let Ok(power) = room.get_power_consumption(1) {
-            if let Some(watts) = power {
-                println!("Current power consumption: {}W", watts);
-            } else {
-                println!("Device does not support power consumption readings");
-            }
-        } else {
-            println!("Failed to access the device");
-        }
-    }
-
-    println!("\nTrying to access a non-existent room...");
-    match house.rooms(10) {
-        Ok(_) => println!("Successfully accessed the room"),
-        Err(e) => println!("Error: {}", e),
-    }
-
-    println!("\nTurning on Living Room Socket 1...");
-    if let Err(e) = turn_on_device(&mut house, 0, 1) {
-        println!("Failed to turn on device: {}", e);
-    } else {
-        println!("Socket turned on successfully");
-    }
-
-    println!("\nFinal state:");
+    println!("\nFinal House State:");
     println!("{}", house.report());
 }
 
-// Helper function to demonstrate error handling
-fn turn_on_device(
-    house: &mut SmartHouse,
-    room_idx: usize,
-    device_idx: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let room = house.rooms_mut(room_idx)?;
-    let success = room.turn_on_device(device_idx)?;
+fn demonstrate_error_handling() {
+    println!("\n=== Демонстрація обробки помилок ===");
 
-    if !success {
-        return Err("Device does not support turning on".into());
+    let house = SmartHouse::new_empty(String::from("Error Handling Demo"));
+
+    match house.device(&"Non-existent Room".to_string(), &"Some Device".to_string()) {
+        Ok(_) => println!("Несподіваний успіх"),
+        Err(e) => println!("Помилка (очікувана): {}", e),
     }
+}
 
-    Ok(())
+fn print_report<T: Reporter>(reportable: &T) {
+    println!("\n=== Звіт ===");
+    println!("{}", reportable.report());
+}
+
+fn main() {
+    demonstrate_dynamic_rooms_and_devices();
+    demonstrate_error_handling();
+
+    let thermometer = SmartThermometer::new(String::from("Main Thermometer"), 23.5);
+    let socket = SmartSocket::new(String::from("Main Socket"), true, 100.0);
+    let device = SmartDevice::Thermometer(thermometer);
+
+    print_report(&device);
+    print_report(&socket);
 }

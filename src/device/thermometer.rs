@@ -1,3 +1,4 @@
+use crate::Reporter;
 use crate::device::device_trait::{SmartDeviceTrait, TemperatureSensor};
 
 /// Smart thermometer device implementation
@@ -20,19 +21,21 @@ impl SmartDeviceTrait for SmartThermometer {
     fn name(&self) -> &str {
         &self.name
     }
+}
 
+impl TemperatureSensor for SmartThermometer {
+    fn temperature(&self) -> f32 {
+        self.temperature
+    }
+}
+
+impl Reporter for SmartThermometer {
     fn report(&self) -> String {
         format!(
             "Device: {name}, Temperature: {temperature}°C",
             name = self.name(),
             temperature = self.temperature()
         )
-    }
-}
-
-impl TemperatureSensor for SmartThermometer {
-    fn temperature(&self) -> f32 {
-        self.temperature
     }
 }
 

@@ -5,6 +5,7 @@ mod socket;
 mod thermometer;
 
 // Re-export for easier access
+pub use crate::report::Reporter;
 pub use device_trait::SmartDeviceTrait;
 pub use smart_device::SmartDevice;
 pub use socket::SmartSocket;

@@ -2,7 +2,25 @@
 
 ## Overview
 
-Smart Home is a Rust-based library for managing and interacting with smart home devices. It provides a flexible and type-safe approach to modeling smart home environments, supporting various device types and operations.
+Smart Home is a Rust-based library for managing and interacting with smart home devices. It provides a flexible and
+type-safe approach to modeling smart home environments, supporting various device types and operations.
+
+## Test Coverage
+
+### Overall Coverage: 61.23% (139/227 lines)
+
+Detailed Coverage by Module:
+
+- 📁 `device/`: 88.57% (62/70 lines)
+- 📁 `error.rs`: 100% (15/15 lines)
+- 📁 `house.rs`: 67.57% (25/37 lines)
+- 📁 `room.rs`: 94.87% (37/39 lines)
+
+## Improvements in Progress
+
+- [ ] Increase test coverage for `house.rs`
+- [ ] Add more comprehensive integration tests
+- [ ] Enhance error handling scenarios
 
 ## Features
 
@@ -29,13 +47,13 @@ use smart_home::{SmartHouse, Room, SmartDevice, SmartSocket, SmartThermometer};
 fn main() {
     // Create devices
     let living_room_socket = SmartSocket::new(
-        String::from("Living Room Socket"), 
-        true, 
+        String::from("Living Room Socket"),
+        true,
         120.0
     );
-    
+
     let bedroom_thermometer = SmartThermometer::new(
-        String::from("Bedroom Thermometer"), 
+        String::from("Bedroom Thermometer"),
         22.5
     );
 
@@ -52,7 +70,7 @@ fn main() {
 
     // Create a smart house
     let mut house = SmartHouse::new(
-        String::from("My Smart Home"), 
+        String::from("My Smart Home"),
         vec![living_room, bedroom]
     );
 
@@ -64,18 +82,24 @@ fn main() {
 ## Key Concepts
 
 ### SmartDevice
+
 An enum representing different types of smart devices:
+
 - `Thermometer`: Measures temperature
 - `Socket`: Controls power and measures consumption
 
 ### Room
+
 A collection of smart devices with methods to:
+
 - Add/remove devices
 - Access devices
 - Generate reports
 
 ### SmartHouse
+
 Manages multiple rooms with capabilities to:
+
 - Add/remove rooms
 - Generate comprehensive reports
 - Safely access rooms and devices
@@ -86,8 +110,8 @@ The library uses a custom `AccessError` for safe device and room access:
 
 ```rust
 match house.rooms(2) {
-    Ok(room) => println!("Room accessed"),
-    Err(e) => println!("Error: {}", e),
+Ok(room) => println ! ("Room accessed"),
+Err(e) => println ! ("Error: {}", e),
 }
 ```
 
@@ -101,13 +125,22 @@ match house.rooms(2) {
 ## Testing
 
 Extensive test coverage includes:
+
 - Unit tests for each component
 - Behavior testing
 - Error case validation
 
 Run tests with:
+
 ```bash
 cargo test
+```
+
+To generate a detailed coverage report:
+
+```bash
+cargo install cargo-tarpaulin
+cargo tarpaulin -v
 ```
 
 ## Contributing
@@ -130,6 +163,7 @@ cargo test
 - [ ] Implement device communication protocols
 - [ ] Create a web/mobile interface
 - [ ] Add persistent storage support
+- [ ] Improve test coverage
 
 ## License
 
@@ -139,19 +173,20 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 The project includes a Makefile to simplify common development tasks:
 
-| Command        | Description                                     |
-|---------------|-------------------------------------------------|
-| `make help`   | Show all available commands                     |
-| `make build`  | Compile the project                             |
-| `make test`   | Run all unit tests                              |
-| `make clean`  | Remove build artifacts                          |
-| `make format` | Format code using rustfmt                       |
-| `make lint`   | Run clippy for static code analysis             |
-| `make doc`    | Generate and open project documentation         |
-| `make run`    | Execute the main binary                         |
-| `make all`    | Build, test, and lint the project               |
-| `make update` | Update project dependencies                     |
-| `make release`| Create an optimized release build               |
+| Command         | Description                             |
+|-----------------|-----------------------------------------|
+| `make help`     | Show all available commands             |
+| `make build`    | Compile the project                     |
+| `make test`     | Run all unit tests                      |
+| `make coverage` | Generate test coverage report           |
+| `make clean`    | Remove build artifacts                  |
+| `make format`   | Format code using rustfmt               |
+| `make lint`     | Run clippy for static code analysis     |
+| `make doc`      | Generate and open project documentation |
+| `make run`      | Execute the main binary                 |
+| `make all`      | Build, test, and lint the project       |
+| `make update`   | Update project dependencies             |
+| `make release`  | Create an optimized release build       |
 
 ### Quick Start with Makefile
 

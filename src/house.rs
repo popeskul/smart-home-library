@@ -1,17 +1,27 @@
-use crate::error::AccessError;
+use crate::error::DeviceAccessError;
 use crate::room::Room;
+use crate::{Reporter, SmartDevice};
+use std::collections::HashMap;
 
 /// Represents a smart house with multiple rooms
 #[derive(Debug)]
 pub struct SmartHouse {
     name: String,
-    rooms: Vec<Room>,
+    rooms: HashMap<String, Room>,
 }
 
 impl SmartHouse {
     /// Creates a new smart house with the specified name and rooms
-    pub fn new(name: String, rooms: Vec<Room>) -> Self {
+    pub fn new(name: String, rooms: HashMap<String, Room>) -> Self {
         Self { name, rooms }
+    }
+
+    /// Creates a new smart house with the specified name and an empty list of rooms
+    pub fn new_empty(name: String) -> Self {
+        Self {
+            name,
+            rooms: HashMap::new(),
+        }
     }
 
     /// Returns the name of the house
@@ -20,66 +30,78 @@ impl SmartHouse {
     }
 
     /// Returns all rooms in the house
-    pub fn all_rooms(&self) -> &[Room] {
+    pub fn all_rooms(&self) -> &HashMap<String, Room> {
         &self.rooms
     }
 
-    /// Returns a reference to a specific room by index
-    pub fn rooms(&self, index: usize) -> Result<&Room, AccessError> {
-        self.rooms.get(index).ok_or_else(|| AccessError {
-            resource_type: String::from("Room"),
-            requested_index: index,
-            total_count: self.rooms.len(),
-        })
+    /// Returns a reference to a specific room by name
+    pub fn room(&self, name: &String) -> Option<&Room> {
+        self.rooms.get(name)
     }
 
-    /// Returns a mutable reference to a specific room by index
-    pub fn rooms_mut(&mut self, index: usize) -> Result<&mut Room, AccessError> {
-        let total_rooms = self.rooms.len();
-
-        self.rooms.get_mut(index).ok_or_else(|| AccessError {
-            resource_type: String::from("Room"),
-            requested_index: index,
-            total_count: total_rooms,
-        })
+    /// Returns a mutable reference to a specific room by name
+    pub fn room_mut(&mut self, name: &String) -> Option<&mut Room> {
+        self.rooms.get_mut(name)
     }
 
-    /// Generates a text report about the house and all its rooms and devices
-    pub fn report(&self) -> String {
-        // Estimate capacity for better string allocation performance
-        let estimated_capacity =
-            self.name.len() + self.rooms.iter().map(|r| r.report().len()).sum::<usize>() + 50;
+    /// Adds a new room to the house
+    pub fn add_room(&mut self, name: String, room: Room) -> Option<Room> {
+        self.rooms.insert(name, room)
+    }
+
+    /// Removes a room from the house by name
+    pub fn remove_room(&mut self, name: &String) -> Option<Room> {
+        self.rooms.remove(name)
+    }
+
+    /// Returns a reference to a specific device in a room by room and device name
+    pub fn device(
+        &self,
+        room_name: &String,
+        device_name: &String,
+    ) -> Result<&SmartDevice, DeviceAccessError> {
+        match self.rooms.get(room_name) {
+            Some(room) => room.device(device_name).ok_or_else(|| {
+                DeviceAccessError::DeviceNotFound(device_name.clone(), room_name.clone())
+            }),
+            None => Err(DeviceAccessError::RoomNotFound(room_name.clone())),
+        }
+    }
+
+    /// Returns a mutable reference to a specific device in a room by room and device name
+    pub fn device_mut(
+        &mut self,
+        room_name: &String,
+        device_name: &String,
+    ) -> Result<&mut SmartDevice, DeviceAccessError> {
+        match self.rooms.get_mut(room_name) {
+            Some(room) => room.device_mut(device_name).ok_or_else(|| {
+                DeviceAccessError::DeviceNotFound(device_name.clone(), room_name.clone())
+            }),
+            None => Err(DeviceAccessError::RoomNotFound(room_name.clone())),
+        }
+    }
+}
+
+impl Reporter for SmartHouse {
+    fn report(&self) -> String {
+        let header_format = format!("=== Smart House: {} ===\n", self.name);
+        let newlines = self.rooms.len();
+
+        let estimated_capacity = header_format.len()
+            + self.rooms.values().map(|r| r.report().len()).sum::<usize>()
+            + newlines;
 
         let mut report = String::with_capacity(estimated_capacity);
 
-        report.push_str(&format!("=== Smart House: {} ===\n", self.name));
+        report.push_str(&header_format);
 
-        for room in &self.rooms {
+        for room in self.rooms.values() {
             report.push_str(&room.report());
             report.push('\n');
         }
 
         report
-    }
-
-    /// Adds a new room to the house
-    pub fn add_room(&mut self, room: Room) {
-        self.rooms.push(room);
-    }
-
-    /// Removes a room from the house by index
-    pub fn remove_room(&mut self, index: usize) -> Result<Room, AccessError> {
-        if index < self.rooms.len() {
-            let room = self.rooms.remove(index);
-            self.rooms.shrink_to_fit();
-            Ok(room)
-        } else {
-            Err(AccessError {
-                resource_type: String::from("Room"),
-                requested_index: index,
-                total_count: self.rooms.len(),
-            })
-        }
     }
 }
 
@@ -88,8 +110,8 @@ mod tests {
     use super::*;
     use crate::device::{SmartDevice, SmartSocket, SmartThermometer};
     use mockall::mock;
+    use std::collections::HashMap;
 
-    // Create mock for Room
     mock! {
         pub Room {}
         impl Clone for Room {
@@ -98,52 +120,67 @@ mod tests {
     }
 
     fn create_empty_house() -> SmartHouse {
-        SmartHouse::new(String::from("Test House"), vec![])
+        SmartHouse::new(String::from("Test House"), HashMap::new())
     }
 
     fn create_house_with_rooms() -> SmartHouse {
-        let room1 = Room::new("Room 1".to_string(), vec![]);
-        let room2 = Room::new("Room 2".to_string(), vec![]);
-        SmartHouse::new("Test House".to_string(), vec![room1, room2])
+        let mut rooms = HashMap::new();
+        rooms.insert(
+            "Room 1".to_string(),
+            Room::new("Room 1".to_string(), HashMap::new()),
+        );
+        rooms.insert(
+            "Room 2".to_string(),
+            Room::new("Room 2".to_string(), HashMap::new()),
+        );
+        SmartHouse::new("Test House".to_string(), rooms)
     }
 
     fn create_house_with_devices() -> SmartHouse {
-        // Create devices for rooms
-        let living_room_devices = vec![
+        let mut living_room_devices = HashMap::new();
+        living_room_devices.insert(
+            "Living Room Thermometer".to_string(),
             SmartDevice::Thermometer(SmartThermometer::new(
                 "Living Room Thermometer".to_string(),
                 21.0,
             )),
+        );
+        living_room_devices.insert(
+            "Living Room Socket".to_string(),
             SmartDevice::Socket(SmartSocket::new(
                 "Living Room Socket".to_string(),
                 true,
                 80.0,
             )),
-        ];
+        );
 
-        let bedroom_devices = vec![SmartDevice::Thermometer(SmartThermometer::new(
+        let mut bedroom_devices = HashMap::new();
+        bedroom_devices.insert(
             "Bedroom Thermometer".to_string(),
-            19.5,
-        ))];
+            SmartDevice::Thermometer(SmartThermometer::new(
+                "Bedroom Thermometer".to_string(),
+                19.5,
+            )),
+        );
 
-        // Create rooms
         let living_room = Room::new("Living Room".to_string(), living_room_devices);
         let bedroom = Room::new("Bedroom".to_string(), bedroom_devices);
 
-        // Create house
-        SmartHouse::new("Smart Home".to_string(), vec![living_room, bedroom])
+        let mut hash_rooms = HashMap::new();
+        hash_rooms.insert("Living Room".to_string(), living_room);
+        hash_rooms.insert("Bedroom".to_string(), bedroom);
+        SmartHouse::new("Smart Home".to_string(), hash_rooms)
     }
 
     #[test]
     fn test_house_creation() {
-        let house = SmartHouse::new(String::from("Test House"), vec![]);
+        let house = SmartHouse::new(String::from("Test House"), HashMap::new());
         assert_eq!(house.name(), "Test House");
         assert!(house.all_rooms().is_empty());
     }
 
     #[test]
     fn test_add_and_remove_room() {
-        // Тест як табличний
         struct AddRemoveRoomTestCase {
             name: &'static str,
             initial_house: SmartHouse,
@@ -153,44 +190,36 @@ mod tests {
         }
 
         let test_cases = vec![
-            // Тест на додавання кімнати
             AddRemoveRoomTestCase {
                 name: "Add a room to empty house",
                 initial_house: create_empty_house(),
                 operation: |house| {
-                    let devices = vec![
-                        SmartDevice::Thermometer(SmartThermometer::new(
-                            "Thermo 1".to_string(),
-                            22.0,
-                        )),
-                        SmartDevice::Socket(SmartSocket::new("Socket 1".to_string(), true, 100.0)),
-                    ];
+                    let devices = HashMap::new();
                     let room = Room::new("Test Room".to_string(), devices);
+                    let room_name = room.name().to_string();
 
-                    house.add_room(room);
+                    house.add_room(room_name, room);
                     (house.all_rooms().len(), true)
                 },
                 expected_rooms_count: 1,
                 expected_success: true,
             },
-            // Тест на видалення кімнати
             AddRemoveRoomTestCase {
                 name: "Remove a room from house with rooms",
                 initial_house: create_house_with_rooms(),
-                operation: |house| match house.remove_room(0) {
-                    Ok(_) => (house.all_rooms().len(), true),
-                    Err(_) => (house.all_rooms().len(), false),
+                operation: |house| match house.remove_room(&"Room 1".to_string()) {
+                    Some(_) => (house.all_rooms().len(), true),
+                    None => (house.all_rooms().len(), false),
                 },
                 expected_rooms_count: 1,
                 expected_success: true,
             },
-            // Тест на видалення неіснуючої кімнати
             AddRemoveRoomTestCase {
                 name: "Try to remove non-existent room",
                 initial_house: create_house_with_rooms(),
-                operation: |house| match house.remove_room(10) {
-                    Ok(_) => (house.all_rooms().len(), true),
-                    Err(_) => (house.all_rooms().len(), false),
+                operation: |house| match house.remove_room(&"Room 3".to_string()) {
+                    Some(_) => (house.all_rooms().len(), true),
+                    None => (house.all_rooms().len(), false),
                 },
                 expected_rooms_count: 2,
                 expected_success: false,
@@ -217,40 +246,39 @@ mod tests {
 
     #[test]
     fn test_room_access() {
-        // Табличний тест для доступу до кімнат
         struct RoomAccessTestCase {
             name: &'static str,
             house: SmartHouse,
-            room_index: usize,
-            expected_result: Result<&'static str, ()>,
+            room_name: &'static str,
+            expected_result: Option<&'static str>,
         }
 
         let test_cases = vec![
             RoomAccessTestCase {
                 name: "Access first room",
                 house: create_house_with_rooms(),
-                room_index: 0,
-                expected_result: Ok("Room 1"),
+                room_name: "Room 1",
+                expected_result: Some("Room 1"),
             },
             RoomAccessTestCase {
                 name: "Access second room",
                 house: create_house_with_rooms(),
-                room_index: 1,
-                expected_result: Ok("Room 2"),
+                room_name: "Room 2",
+                expected_result: Some("Room 2"),
             },
             RoomAccessTestCase {
                 name: "Access non-existent room",
                 house: create_house_with_rooms(),
-                room_index: 2,
-                expected_result: Err(()),
+                room_name: "Room 3",
+                expected_result: None,
             },
         ];
 
         for tc in test_cases {
-            let result = tc.house.rooms(tc.room_index);
+            let result = tc.house.room(&tc.room_name.to_string());
 
             match (result, tc.expected_result) {
-                (Ok(room), Ok(expected_name)) => {
+                (Some(room), Some(expected_name)) => {
                     assert_eq!(
                         room.name(),
                         expected_name,
@@ -260,19 +288,19 @@ mod tests {
                         room.name()
                     );
                 }
-                (Err(_), Err(_)) => {
-                    // Test passes - we expected an error and got one
+                (None, None) => {
+                    // No room was found, as expected
                 }
-                (Ok(room), Err(_)) => {
+                (Some(room), None) => {
                     panic!(
-                        "Failed test case '{}': Expected error but got room '{}'",
+                        "Failed test case '{}': Expected no room but got room '{}'",
                         tc.name,
                         room.name()
                     );
                 }
-                (Err(_), Ok(expected_name)) => {
+                (None, Some(expected_name)) => {
                     panic!(
-                        "Failed test case '{}': Expected room '{}' but got error",
+                        "Failed test case '{}': Expected room '{}' but got none",
                         tc.name, expected_name
                     );
                 }
@@ -282,44 +310,42 @@ mod tests {
 
     #[test]
     fn test_mutable_room_access() {
-        // Табличний тест для мутабельного доступу до кімнат
         struct MutableRoomAccessTestCase {
             name: &'static str,
-            room_index: usize,
+            room_name: &'static str,
             expected_success: bool,
         }
 
         let test_cases = vec![
             MutableRoomAccessTestCase {
                 name: "Mutable access to first room",
-                room_index: 0,
+                room_name: "Room 1",
                 expected_success: true,
             },
             MutableRoomAccessTestCase {
                 name: "Mutable access to non-existent room",
-                room_index: 10,
+                room_name: "Room 10",
                 expected_success: false,
             },
         ];
 
         for tc in test_cases {
             let mut house = create_house_with_rooms();
-            let result = house.rooms_mut(tc.room_index);
+            let result = house.room_mut(&tc.room_name.to_string());
 
             assert_eq!(
-                result.is_ok(),
+                result.is_some(),
                 tc.expected_success,
                 "Failed test case '{}': Expected success {} but got {}",
                 tc.name,
                 tc.expected_success,
-                result.is_ok()
+                result.is_some()
             );
         }
     }
 
     #[test]
     fn test_report_generation() {
-        // Тест генерації звіту
         struct ReportTestCase {
             name: &'static str,
             house: SmartHouse,
@@ -330,13 +356,18 @@ mod tests {
             ReportTestCase {
                 name: "Report for house with a thermometer",
                 house: {
-                    // Створюємо кімнату з термометром
-                    let devices = vec![SmartDevice::Thermometer(SmartThermometer::new(
+                    let mut devices = HashMap::new();
+                    devices.insert(
                         "Living Room Thermometer".to_string(),
-                        22.5,
-                    ))];
+                        SmartDevice::Thermometer(SmartThermometer::new(
+                            "Living Room Thermometer".to_string(),
+                            22.5,
+                        )),
+                    );
                     let room = Room::new("Living Room".to_string(), devices);
-                    SmartHouse::new("Test House".to_string(), vec![room])
+                    let mut rooms = HashMap::new();
+                    rooms.insert("Living Room".to_string(), room);
+                    SmartHouse::new("Test House".to_string(), rooms)
                 },
                 expected_content: vec![
                     "=== Smart House: Test House ===",
